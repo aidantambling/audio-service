@@ -7,6 +7,7 @@ import path from "path";
 import os from "os";
 import youtubedl from "youtube-dl-exec";
 import ffmpeg from "ffmpeg-static";
+import { fileURLToPath } from "url";
 import "dotenv/config";
 
 const app = express();
@@ -28,7 +29,7 @@ async function startServer() {
   gfs = new GridFSBucket(mongoose.connection.db, { bucketName: "audios" });
   console.log("✅ MongoDB GridFS ready");
 
-  const PORT = process.env.PORT || 5001;
+  const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
 }
 
@@ -73,7 +74,7 @@ app.post("/api/convert-mp3", async (req, res) => {
         format: "bestaudio/best",
         extractAudio: true,
         audioFormat: "mp3",
-        audioQuality: "5",              // speed/size tradeoff; "0" = best (slower)
+        audioQuality: "5", // speed/size tradeoff; "0" = best (slower)
         ffmpegLocation: ffmpeg,
         output: tempPath,
         externalDownloader: "aria2c",
@@ -97,7 +98,10 @@ app.post("/api/convert-mp3", async (req, res) => {
         .pipe(uploadStream)
         .on("finish", async () => {
           // Clean temp
-          try { fs.unlinkSync(tempPath); } catch {}
+          try {
+            fs.unlinkSync(tempPath);
+          } catch {}
+
           // Save/Upsert song metadata (library)
           await songsCol().updateOne(
             { filename },
@@ -177,5 +181,14 @@ app.get("/api/songs", async (_req, res) => {
   res.json(items);
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+// --- Frontend build serving ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Serve frontend (after build)
+app.use(express.static(path.join(__dirname, "../client/dist")));
+
+// Fallback for React Router (SPA)
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../client/dist/index.html"));
+});
